@@ -18,8 +18,7 @@ actions = [nel.Direction.UP, nel.Direction.DOWN, nel.Direction.LEFT,
            nel.Direction.RIGHT]
 torch.set_printoptions(precision=10)
 
-__agent_addOwnExperienceProbability = 0.30
-
+__agent_addOwnExperienceBias = 0.30
 
 class Policy(nn.Module):
     def __init__(self, state_size, action_dim=len(actions), history_len=2,
@@ -66,7 +65,7 @@ class RandomizedImitationAgent(BaseAgent):
         self.history_len = history_len
 
         # Multi-Agent Customization
-        self.addOwnExperienceProbability = __agent_addOwnExperienceProbability
+        self.addOwnExperienceBias = __agent_addOwnExperienceBias
         # self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
         # self.weightsForAllAgents = []
         self.selfAgentID = None
@@ -156,8 +155,8 @@ class RandomizedImitationAgent(BaseAgent):
         elif self.selfAgentID != int(selfI):
             print("ERROR selfI has changed from %d to %d" % (self.selfAgentID, selfI))
         # Get Probabilities For Picking An Agent
-        probabilities = [(1 - self.addOwnExperienceProbability) / (len(allAgentsExp) - 1) for agentExp in allAgentsExp]
-        probabilities[selfI] = self.addOwnExperienceProbability
+        probabilities = [1.0 / len(allAgentsExp) for agentExp in allAgentsExp]
+        self.biasProbabilities(probabilities)
         print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
@@ -168,6 +167,12 @@ class RandomizedImitationAgent(BaseAgent):
                 totalProbailitySoFar = 1
             if randomFloat <= totalProbailitySoFar:
                 return allAgentsExp[i]
+
+    # Destructively modify the probabilities list to account for self-bias
+    def biasProbabilities(self, probabilities):
+        selfConfidenceProbabilities = [1.0 if i == self.agentID else 0.0 for i in xrange(len(probabilities))]
+        for i in range(len(probabilities)):
+            probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
 
 class WeightedImitationAgent(BaseAgent):
     def __init__(self, env, state_size, history_len=1, load_filepath=None):
@@ -184,7 +189,7 @@ class WeightedImitationAgent(BaseAgent):
         self.history_len = history_len
 
         # Multi-Agent Customization
-        self.addOwnExperienceProbability = __agent_addOwnExperienceProbability
+        self.addOwnExperienceBias = __agent_addOwnExperienceBias
         self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
         self.weightsForAllAgents = []
         self.selfAgentID = None
@@ -291,9 +296,9 @@ class WeightedImitationAgent(BaseAgent):
                 self.jellybeanAccuracyForAllAgents[i] = (prevJellybeans, prevSteps + 1)
             self.weightsForAllAgents[i] = self.weightFromTuple(jellybeanAccuracyForAllAgents[i])
         # Get Probabilities For Picking An Agent
-        sumOfWeights = sum(self.weightsForAllAgents[:selfI] + self.weightsForAllAgents[selfI+1:])
-        probabilities = [float(weight) * (1 - self.addOwnExperienceProbability) / sumOfWeights for weight in self.weightsForAllAgents]
-        probabilities[selfI] = self.addOwnExperienceProbability
+        sumOfWeights = sum(self.weightsForAllAgents)
+        probabilities = [float(weight) / sumOfWeights for weight in self.weightsForAllAgents]
+        self.biasProbabilities(probabilities)
         print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
@@ -304,6 +309,12 @@ class WeightedImitationAgent(BaseAgent):
                 totalProbailitySoFar = 1
             if randomFloat <= totalProbailitySoFar:
                 return allAgentsExp[i]
+
+    # Destructively modify the probabilities list to account for self-bias
+    def biasProbabilities(self, probabilities):
+        selfConfidenceProbabilities = [1.0 if i == self.agentID else 0.0 for i in xrange(len(probabilities))]
+        for i in range(len(probabilities)):
+            probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
 
     def weightFromTuple(self, tup):
         return float(tup[0])/tup[1]
