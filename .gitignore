@@ -108,4 +108,7 @@ venv.bak/
 *.pkl
 outputs/
 
+#bash
+*.swp
+
 tags

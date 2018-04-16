@@ -35,14 +35,14 @@ def multiagent_test(num_agents):
     state_size = (config2.vision_range*2 + 1)**2 * config2.color_num_dims + config2.scent_num_dims
     
     #initialize agents
-    for _ in range(num_agents):
+    for i in range(num_agents):
 
         env = Environment(config2)
 
         agent = RLAgent(env, state_size=state_size)
 
         #load one model per agent
-        #agent._load("outputs/models/NELQ_190000")
+        agent._load("outputs/models/NELQ_"+str(i)+"0")
 
         position = agent.position()
         painter = nel.MapVisualizer(env.simulator, config2,
@@ -64,8 +64,8 @@ def multiagent_test(num_agents):
             center_painter_on_agent(painters[p], agents[p])
             painters[p].draw()
 
-        #spawn 1 agent every timesteps/num_agents timesteps
-            spawned_agents += 1
+            if i == round(1000*spawned_agents)/len(agents) - 1:
+                spawned_agents += 1
                     
 def main():
 

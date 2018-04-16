@@ -164,6 +164,7 @@ def train(agent, env, actions):
     plt_fn = list()
     save_fn = list()
 
+
     for i in range(len(agent)):
 
         replay.append(ReplayBuffer(train_config['replay_buffer_capacity']))
@@ -182,6 +183,7 @@ def train(agent, env, actions):
         plt_fn.append(plt)
         save_fn.append(save)
 
+    spawned_agents = 1
 
     for training_steps in range(max_steps):
         # Update current exploration parameter epsilon, which is discounted
@@ -189,7 +191,10 @@ def train(agent, env, actions):
 
         epsilon = eps_func(training_steps)
 
-        for i in range(len(agent)):
+        for i in range(spawned_agents):
+
+            if training_steps == round(max_steps*spawned_agents)/len(agent) - 1:
+                spawned_agents+=1
 
             add_to_replay = len(agent[i].prev_states) >= 1
 
