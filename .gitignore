@@ -104,4 +104,8 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+#outputs
+*.pkl
+outputs/
+
 tags

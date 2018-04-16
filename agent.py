@@ -285,7 +285,7 @@ class WeightedImitationAgent(BaseAgent):
         while numCurrAgents > numPrevAgents: # agents can only get added, never die
             self.jellybeanAccuracyForAllAgents.append((0, 1)) # All agents start with 1 step to avoid divide by 0 errors
             self.weightsForAllAgents.append(0.0)
-            numPrevAgents++
+            numPrevAgents+=1
         # Update agent jellybeanAccuracy and weights
         for i in xrange(len(allAgentsExp)):
             (s1, action, reward, s2, done) = allAgentsExp[i]

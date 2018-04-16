@@ -171,6 +171,7 @@ def train(agent, env, actions):
         all_rewards.append(deque(maxlen=100))
         rewards.append([])
         losses.append([])
+        loss.append(None)
 
         agent[i].update_target()
 
@@ -215,8 +216,8 @@ def train(agent, env, actions):
             if training_steps % policy_update_frequency == 0:
                 if batch_size < len(replay[i]):
                     # Compute loss and update parameters.
-                    loss.append(compute_td_loss(
-                        batch_size, agent[i], replay[i], discount_factor, optimizer[i]))
+                    loss[i] = compute_td_loss(
+                        batch_size, agent[i], replay[i], discount_factor, optimizer[i])
                     losses[i].append(loss[i].data[0])
 
             if training_steps % 200 == 0 and training_steps > 0:
@@ -247,7 +248,7 @@ def train(agent, env, actions):
 
     for _ in range(100):
 
-        for i in range(len(agent)):
+        for i in range(len(agent)):  
 
             s1 = agent[i].get_state()
             action, reward = agent[i].step()
