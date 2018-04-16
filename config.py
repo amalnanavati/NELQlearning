@@ -62,7 +62,7 @@ agent_config = {
 train_config={
     'discount_factor': .99,
     'eval_steps': 1000,
-    'max_steps': 5000001,
+    'max_steps': 10001,
     'batch_size': 64,
     'eval_frequency': 1000,
     'target_update_frequency': 1000,

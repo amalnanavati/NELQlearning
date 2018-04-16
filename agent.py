@@ -18,7 +18,7 @@ actions = [nel.Direction.UP, nel.Direction.DOWN, nel.Direction.LEFT,
            nel.Direction.RIGHT]
 torch.set_printoptions(precision=10)
 
-__agent_addOwnExperienceBias = 0.30
+# __agent_addOwnExperienceBias = 0.30
 
 class Policy(nn.Module):
     def __init__(self, state_size, action_dim=len(actions), history_len=2,
@@ -52,7 +52,7 @@ class BaseAgent(nel.Agent):
 
 class RandomizedImitationAgent(BaseAgent):
     def __init__(self, env, state_size, history_len=1, load_filepath=None):
-        super(RLAgent, self).__init__(env, load_filepath)
+        super(RandomizedImitationAgent, self).__init__(env, load_filepath)
         self.policy = Policy(state_size=state_size)
         self.target = Policy(state_size=state_size)
         self.target.load_state_dict(self.policy.state_dict())
@@ -65,7 +65,7 @@ class RandomizedImitationAgent(BaseAgent):
         self.history_len = history_len
 
         # Multi-Agent Customization
-        self.addOwnExperienceBias = __agent_addOwnExperienceBias
+        self.addOwnExperienceBias = 0.30 # NOTE (amal): ,ust change this both here and above!
         # self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
         # self.weightsForAllAgents = []
         self.selfAgentID = None
@@ -176,7 +176,7 @@ class RandomizedImitationAgent(BaseAgent):
 
 class WeightedImitationAgent(BaseAgent):
     def __init__(self, env, state_size, history_len=1, load_filepath=None):
-        super(RLAgent, self).__init__(env, load_filepath)
+        super(WeightedImitationAgent, self).__init__(env, load_filepath)
         self.policy = Policy(state_size=state_size)
         self.target = Policy(state_size=state_size)
         self.target.load_state_dict(self.policy.state_dict())
@@ -189,7 +189,7 @@ class WeightedImitationAgent(BaseAgent):
         self.history_len = history_len
 
         # Multi-Agent Customization
-        self.addOwnExperienceBias = __agent_addOwnExperienceBias
+        self.addOwnExperienceBias = 0.30 # NOTE (amal): ,ust change this both here and above!
         self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
         self.weightsForAllAgents = []
         self.selfAgentID = None

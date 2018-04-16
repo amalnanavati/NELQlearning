@@ -1,4 +1,4 @@
-from agent import RLAgent
+from agent import *
 from environment import Environment
 from config import config2, agent_config, train_config
 from plot import plot_reward
@@ -88,7 +88,7 @@ def plot_setup():
         ax1.set_ylim([min(rewards), max(rewards) + 10])
         ax2.set_xlim([0, len(losses)])
         ax2.set_ylim([min(losses), max(losses)])
-        print(max(losses))
+        print("Max of losses = "+ str(max(losses)))
         ax2.set_yscale('log')
         plt.draw()
         plt.pause(0.0001)
@@ -179,9 +179,11 @@ def train(agent, env, actions):
         optimizer.append(optim.Adam(agent[i].policy.parameters(),
             lr=agent_config['learning_rate']))
 
-        plt,save = plot_setup()
-        plt_fn.append(plt)
-        save_fn.append(save)
+
+    # To save computation resources, we will lazily spawn plots
+    plt,save = plot_setup()
+    plt_fn.append(plt)
+    save_fn.append(save)
 
     spawned_agents = 1
 
@@ -191,10 +193,15 @@ def train(agent, env, actions):
 
         epsilon = eps_func(training_steps)
 
-        for i in range(spawned_agents):
+        if training_steps == int(round(max_steps*spawned_agents))/len(agent):
+            print("ADDING AN AGENT", training_steps)
+            spawned_agents+=1
+            # Lazily add a plot for the new agent
+            plt,save = plot_setup()
+            plt_fn.append(plt)
+            save_fn.append(save)
 
-            if training_steps == round(max_steps*spawned_agents)/len(agent) - 1:
-                spawned_agents+=1
+        for i in range(spawned_agents):
 
             add_to_replay = len(agent[i].prev_states) >= 1
 
@@ -225,7 +232,7 @@ def train(agent, env, actions):
                         batch_size, agent[i], replay[i], discount_factor, optimizer[i])
                     losses[i].append(loss[i].data[0])
 
-            if training_steps % 200 == 0 and training_steps > 0:
+            if training_steps % 200 == 0 and training_steps > int(round(max_steps*i))/len(agent):
                 print('step = ', training_steps)
                 print("loss_"+str(i)+" = ", loss[i].data[0])
                 print("train reward_"+str(i)+" = ", tr_reward[i])
@@ -248,12 +255,12 @@ def train(agent, env, actions):
     for i in range(len(agent)):
 
         position = agent[i].position()
-        painter[i] = nel.MapVisualizer(env[i].simulator, config2, (
-        position[0] - 70, position[1] - 70), (position[0] + 70, position[1] + 70))
+        painter.append(nel.MapVisualizer(env[i].simulator, config2, (
+        position[0] - 70, position[1] - 70), (position[0] + 70, position[1] + 70)))
 
     for _ in range(100):
 
-        for i in range(len(agent)):  
+        for i in range(len(agent)):
 
             s1 = agent[i].get_state()
             action, reward = agent[i].step()
@@ -290,7 +297,7 @@ def main():
 
     for i in range(num_agents):
         env.append(Environment(config2))
-        agent.append(RLAgent(env[i], state_size=state_size))
+        agent.append(WeightedImitationAgent(env[i], state_size=state_size))
 
     setup_output_dir()
     train(agent, env, [0, 1, 2, 3])
