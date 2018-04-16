@@ -26,30 +26,50 @@ def center_painter_on_agent(painter, agent):
         (position[0] + 70, position[1] + 70))
 
 
-def test(agent, env):
-    position = agent.position()
-    painter = nel.MapVisualizer(env.simulator, config2,
-        (position[0] - 70, position[1] - 70),
-        (position[0] + 70, position[1] + 70))
-    for _ in range(1000):
-        s1 = agent.get_state()
-        action, reward = agent.step(epsilon=0.1)
-        print(reward)
-        center_painter_on_agent(painter, agent)
-        painter.draw()
 
+def multiagent_test(num_agents):
 
-def main():
-    env = Environment(config2)
+    painters = list()
+    agents = list()
+
     state_size = (config2.vision_range*2 + 1)**2 * config2.color_num_dims + config2.scent_num_dims
-    agent = RLAgent(env, state_size=state_size)
-    agent._load("outputs/models/NELQ_190000")
-    # ._load("NELQ.model")
+    
+    #initialize agents
+    for _ in range(num_agents):
 
-    # optimizer = optim.Adam(agent.policy.parameters())
-    # print list(agent.policy.parameters())
-    test(agent, env)
+        env = Environment(config2)
 
+        agent = RLAgent(env, state_size=state_size)
+
+        #load one model per agent
+        #agent._load("outputs/models/NELQ_190000")
+
+        position = agent.position()
+        painter = nel.MapVisualizer(env.simulator, config2,
+            (position[0] - 70, position[1] - 70),
+            (position[0] + 70, position[1] + 70))
+
+        agents.append(agent)
+        painters.append(painter)
+
+    spawned_agents = 1
+
+    for i in range(1000):
+
+        for p in range(spawned_agents):
+            
+            s1 = agents[p].get_state()
+            action, reward = agents[p].step(epsilon=0.1)
+
+            center_painter_on_agent(painters[p], agents[p])
+            painters[p].draw()
+
+        #spawn 1 agent every timesteps/num_agents timesteps
+            spawned_agents += 1
+                    
+def main():
+
+    multiagent_test(2)
 
 if __name__ == '__main__':
     main()

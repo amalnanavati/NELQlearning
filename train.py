@@ -132,7 +132,7 @@ def save_training_run(losses, rewards, agent, save_fn, model_path, plot_path):
     save_fn(plot_path)
 
 
-def train(agent, env, actions, optimizer):
+def train(agent, env, actions):
     EPS_START = 1.
     EPS_END = .1
     EPS_DECAY_START = 1000.
@@ -146,87 +146,119 @@ def train(agent, env, actions, optimizer):
     eval_frequency = train_config['eval_frequency']
     batch_size = train_config['batch_size']
     training_steps = 0
-    replay = ReplayBuffer(train_config['replay_buffer_capacity'])
     discount_factor = train_config['discount_factor']
-    eval_reward = []
     eval_steps = train_config['eval_steps']
     max_steps = train_config['max_steps']
-    tr_reward = 0
-    agent.update_target()
-    losses = []
-    all_rewards = deque(maxlen=100)
-    rewards = []
-    plt_fn, save_fn = plot_setup()
-    painter = None
-    #painter_tr = nel.MapVisualizer(env.simulator, config2, (-30, -30), (150, 150))
-    prev_weights = agent.policy.fc3.weight
+
+    replay = list()
+    tr_reward = list()
+    all_rewards = list()
+    rewards = list()
+    loss = list()
+    losses = list()
+    eval_reward = list()
+    model_path = list()
+    p_path = list()
+    optimizer = list()
+    painter = list()
+    plt_fn = list()
+    save_fn = list()
+
+    for i in range(len(agent)):
+
+        replay.append(ReplayBuffer(train_config['replay_buffer_capacity']))
+        tr_reward.append(0)
+        all_rewards.append(deque(maxlen=100))
+        rewards.append([])
+        losses.append([])
+
+        agent[i].update_target()
+
+        optimizer.append(optim.Adam(agent[i].policy.parameters(),
+            lr=agent_config['learning_rate']))
+
+        plt,save = plot_setup()
+        plt_fn.append(plt)
+        save_fn.append(save)
+
+
     for training_steps in range(max_steps):
         # Update current exploration parameter epsilon, which is discounted
         # with time.
+
         epsilon = eps_func(training_steps)
 
-        add_to_replay = len(agent.prev_states) >= 1
+        for i in range(len(agent)):
 
-        # Get current state.
-        s1 = agent.get_state()
+            add_to_replay = len(agent[i].prev_states) >= 1
 
-        # Make a step.
-        action, reward = agent.step(epsilon)
+            # Get current state.
+            s1 = agent[i].get_state()
 
-        # Update state according to step.
-        s2 = agent.get_state()
+            # Make a step.
+            action, reward = agent[i].step(epsilon)
 
-        # Accumulate all rewards.
-        tr_reward += reward
-        all_rewards.append(reward)
-        rewards.append(np.sum(all_rewards))
+            # Update state according to step.
+            s2 = agent[i].get_state()
 
-        # Add to memory current state, action it took, reward and new state.
-        if add_to_replay:
-            # enum issue in server machine
-            replay.push(s1, action.value, reward, s2, False)
+            # Accumulate all rewards.
+            tr_reward[i] += reward
+            all_rewards[i].append(reward)
+            rewards[i].append(np.sum(all_rewards[i]))
 
-        # Update the network parameter every update_frequency steps.
-        if training_steps % policy_update_frequency == 0:
-            if batch_size < len(replay):
-                # Compute loss and update parameters.
-                loss = compute_td_loss(
-                    batch_size, agent, replay, discount_factor, optimizer)
-                losses.append(loss.data[0])
+            # Add to memory current state, action it took, reward and new state.
+            if add_to_replay:
+                # enum issue in server machine
+                replay[i].push(s1, action.value, reward, s2, False)
 
-        if training_steps % 200 == 0 and training_steps > 0:
-            print('step = ', training_steps)
-            print("loss = ", loss.data[0])
-            print("train reward = ", tr_reward)
-            print('')
-            if training_steps < 100000:
-                plt_fn(training_steps, rewards, losses)
-            elif training_steps % 50000 == 0:
-                plt_fn(training_steps, rewards, losses)
+            # Update the network parameter every update_frequency steps.
+            if training_steps % policy_update_frequency == 0:
+                if batch_size < len(replay[i]):
+                    # Compute loss and update parameters.
+                    loss.append(compute_td_loss(
+                        batch_size, agent[i], replay[i], discount_factor, optimizer[i]))
+                    losses[i].append(loss[i].data[0])
+
+            if training_steps % 200 == 0 and training_steps > 0:
+                print('step = ', training_steps)
+                print("loss_"+str(i)+" = ", loss[i].data[0])
+                print("train reward_"+str(i)+" = ", tr_reward[i])
+                print('')
+                if training_steps < 100000:
+                    plt_fn[i](training_steps, rewards[i], losses[i])
+                elif training_steps % 50000 == 0:
+                    plt_fn[i](training_steps, rewards[i], losses[i])
 
 
-        if training_steps % target_update_frequency == 0:
-            agent.update_target()
+            if training_steps % target_update_frequency == 0:
+                agent[i].update_target()
 
-        model_path = 'outputs/models/NELQ_' + str(training_steps)
-        p_path = 'outputs/plots/NELQ_plot_' + str(training_steps) + '.png'
+            model_path.append('outputs/models/NELQ_'+ str(i) + str(training_steps))
+            p_path.append('outputs/plots/NELQ_plot_'+ str(i) + str(training_steps) + '.png')
 
-        if training_steps % num_steps_save_training_run == 0:
-            save_training_run(losses, rewards, agent, save_fn, model_path, p_path)
+            if training_steps % num_steps_save_training_run == 0:
+                save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
 
-    position = agent.position()
-    painter = nel.MapVisualizer(env.simulator, config2, (
+    for i in range(len(agent)):
+
+        position = agent[i].position()
+        painter[i] = nel.MapVisualizer(env[i].simulator, config2, (
         position[0] - 70, position[1] - 70), (position[0] + 70, position[1] + 70))
+
     for _ in range(100):
-        s1 = agent.get_state()
-        action, reward = agent.step()
-        painter.draw()
 
-    with open('outputs/eval_reward.pkl', 'w') as f:
-        cPickle.dump(eval_reward, f)
+        for i in range(len(agent)):
 
-    save_training_run(losses, rewards, agent, save_fn, model_path, p_path)
-    print(eval_reward)
+            s1 = agent[i].get_state()
+            action, reward = agent[i].step()
+            painter[i].draw()
+
+    for i in range(len(agent)):
+        with open('outputs/eval_reward_'+i+'.pkl', 'w') as f:
+            cPickle.dump(eval_reward[i], f)
+
+        save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
+        print(eval_reward[i])
 
 
 # cumulative reward for training and test
@@ -241,17 +273,21 @@ def setup_output_dir():
         os.makedirs(p_dir)
 
 def main():
-    env = Environment(config2)
     from agent import actions
     state_size = (config2.vision_range*2 + 1)**2 * config2.color_num_dims + config2.scent_num_dims + len(actions)
-    agent = RLAgent(env, state_size=state_size)
 
-    optimizer = optim.Adam(agent.policy.parameters(),
-        lr=agent_config['learning_rate'])
+    agent = list()
+    env = list()
+    optimizer = list()
+
+    num_agents = 2
+
+    for i in range(num_agents):
+        env.append(Environment(config2))
+        agent.append(RLAgent(env[i], state_size=state_size))
 
     setup_output_dir()
-    train(agent, env, [0, 1, 2, 3], optimizer)
-
+    train(agent, env, [0, 1, 2, 3])
 
 if __name__ == '__main__':
     main()
