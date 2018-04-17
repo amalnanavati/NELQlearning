@@ -19,6 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+import time
 
 class ReplayBuffer(object):
     def __init__(self, capacity):
@@ -64,53 +65,45 @@ def compute_td_loss(batch_size, agent, replay_buffer, gamma, optimizer):
 
     return loss
 
+def plot(plot_agent):
 
-def plot_setup():
-    # plt.ion()
     fig = plt.figure()
-    ax1 = fig.add_subplot(121)
-    ax2 = fig.add_subplot(122)
-    p1, = ax1.plot([])
-    p2, = ax2.plot([])
-    ax2.set_title('loss')
-    print("SETUP")
-    fig.canvas.draw()
+    colors=["blue","red","green","yellow"]
 
-    def update(frame_idx, rewards, losses):
-        p1.set_xdata(range(len(rewards)))
-        p1.set_ydata(rewards)
+    chart_1 = fig.add_subplot(211)
+    chart_1.set_title('sum of rewards')
+    chart_1.grid(True)
 
-        ax1.set_title('frame %s. reward: %s' %
-                      (frame_idx, np.mean([rewards[i] for i in range(-10, 0)])))
-        p2.set_xdata(range(len(losses)))
-        p2.set_ydata(losses)
-        ax1.set_xlim([0, len(rewards)])
-        ax1.set_ylim([min(rewards), max(rewards) + 10])
-        ax2.set_xlim([0, len(losses)])
-        ax2.set_ylim([min(losses), max(losses)])
-        print("Max of losses = "+ str(max(losses)))
-        ax2.set_yscale('log')
-        plt.draw()
-        plt.pause(0.0001)
+    chart_2 = fig.add_subplot(212)
+    chart_2.set_title('rewards per timestep')
+    chart_2.grid(True)
 
-    def save(fname):
-        fig.savefig(fname)
+    fig.tight_layout()
 
-    return update, save
+    for i in range(len(plot_agent)):
 
 
-def plot(frame_idx, rewards, losses):
-    # clear_output(True)
-    fig = plt.figure(figsize=(20, 5))
-    plt.subplot(121)
-    plt.title('frame %s. reward: %s' %
-              (frame_idx, np.mean([rewards[i] for i in range(-10, 0)])))
-    plt.plot(rewards)
-    plt.subplot(122)
-    plt.title('loss')
-    plt.plot(losses)
+        #plot_data gets information about agents != 0
+        plot_data = plot_agent[i] 
+
+        #base_data gets data of agent 0
+        base_data = plot_agent[0]
+
+        #shift step is the step this agent spawned
+        shift_step = plot_data[0][0] - base_data[0][0]
+
+        #shift clock is the clock this agent spawned
+        shift_clock = plot_data[1][0] - base_data[0][0]
+
+        #do the shift
+        for k in range(len(plot_data[0])):
+            plot_data[0][k] -= shift_step
+            plot_data[1][k] -= shift_clock 
+
+        chart_1.plot(plot_data[0],plot_data[2],color=colors[i])
+        chart_2.plot(plot_data[1],plot_data[2],color=colors[i])
+
     plt.show()
-
 
 def get_epsilon(i, EPS_START, EPS_END, EPS_DECAY_START, EPS_DECAY_END):
     if i < EPS_DECAY_START:
@@ -123,14 +116,11 @@ def get_epsilon(i, EPS_START, EPS_END, EPS_DECAY_START, EPS_DECAY_END):
     return epsilon
 
 
-def save_training_run(losses, rewards, agent, save_fn, model_path, plot_path):
+def save_training_run(losses, rewards, agent, model_path):
     with open('outputs/train_stats.pkl', 'wb') as f:
         cPickle.dump((losses, rewards), f)
 
     agent.save(filepath=model_path)
-
-    save_fn(plot_path)
-
 
 def train(agent, env, actions):
     EPS_START = 1.
@@ -163,7 +153,9 @@ def train(agent, env, actions):
     painter = list()
     plt_fn = list()
     save_fn = list()
+    writer = list()
 
+    now = time.time()
 
     for i in range(len(agent)):
 
@@ -179,11 +171,8 @@ def train(agent, env, actions):
         optimizer.append(optim.Adam(agent[i].policy.parameters(),
             lr=agent_config['learning_rate']))
 
-
-    # To save computation resources, we will lazily spawn plots
-    plt,save = plot_setup()
-    plt_fn.append(plt)
-    save_fn.append(save)
+        f = open("outputs/plot_"+str(i)+".txt","w")
+        writer.append(f)
 
     spawned_agents = 1
 
@@ -196,10 +185,6 @@ def train(agent, env, actions):
         if training_steps == int(round(max_steps*spawned_agents))/len(agent):
             print("ADDING AN AGENT", training_steps)
             spawned_agents+=1
-            # Lazily add a plot for the new agent
-            plt,save = plot_setup()
-            plt_fn.append(plt)
-            save_fn.append(save)
 
         for i in range(spawned_agents):
 
@@ -237,11 +222,9 @@ def train(agent, env, actions):
                 print("loss_"+str(i)+" = ", loss[i].data[0])
                 print("train reward_"+str(i)+" = ", tr_reward[i])
                 print('')
-                if training_steps < 100000:
-                    plt_fn[i](training_steps, rewards[i], losses[i])
-                elif training_steps % 50000 == 0:
-                    plt_fn[i](training_steps, rewards[i], losses[i])
 
+                writer[i].write(str(training_steps)+" "+str(round(time.time()-now))+
+                    " "+str(tr_reward[i])+" "+str(loss[i].data[0])+"\n")
 
             if training_steps % target_update_frequency == 0:
                 agent[i].update_target()
@@ -250,30 +233,41 @@ def train(agent, env, actions):
             p_path.append('outputs/plots/NELQ_plot_'+ str(i) + str(training_steps) + '.png')
 
             if training_steps % num_steps_save_training_run == 0:
-                save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
+                save_training_run(losses[i], rewards[i], agent[i], model_path[i])
+
+    plot_data = list()
+    plot_agent = list()
 
     for i in range(len(agent)):
+        writer[i].close()
 
-        position = agent[i].position()
-        painter.append(nel.MapVisualizer(env[i].simulator, config2, (
-        position[0] - 70, position[1] - 70), (position[0] + 70, position[1] + 70)))
+    for i in range(len(agent)): 
 
-    for _ in range(100):
+        f =  open('outputs/plot_'+str(i)+'.txt')
 
-        for i in range(len(agent)):
+        plot_data = list()
+        steps = list()
+        clock = list()
+        rew = list()
+        loss = list()
+       
+        for line in f:
+            plot_line = line.replace('\n','').split(" ")
 
-            s1 = agent[i].get_state()
-            action, reward = agent[i].step()
-            painter[i].draw()
+            steps.append(int(plot_line[0]))
+            clock.append(float(plot_line[1]))
+            rew.append(float(plot_line[2]))
+            loss.append(float(plot_line[3]))
 
-    for i in range(len(agent)):
-        with open('outputs/eval_reward_'+i+'.pkl', 'w') as f:
-            cPickle.dump(eval_reward[i], f)
+            plot_data.append(steps)
+            plot_data.append(clock)
+            plot_data.append(rew)
+            plot_data.append(loss)
+        
+        plot_agent.append(plot_data)
 
-        save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
-        print(eval_reward[i])
-
-
+    plot(plot_agent)
+    
 # cumulative reward for training and test
 
 def setup_output_dir():
