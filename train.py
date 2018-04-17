@@ -1,4 +1,4 @@
-from agent import *
+from agent import RLAgent, WeightedImitationAgent, RandomizedImitationAgent
 from environment import Environment
 from config import config2, agent_config, train_config
 from plot import plot_reward
@@ -77,12 +77,12 @@ def plot_setup():
     fig.canvas.draw()
 
     def update(frame_idx, rewards, losses):
-        p1.set_xdata(range(len(rewards)))
+        p1.set_xdata(xrange(len(rewards)))
         p1.set_ydata(rewards)
 
         ax1.set_title('frame %s. reward: %s' %
-                      (frame_idx, np.mean([rewards[i] for i in range(-10, 0)])))
-        p2.set_xdata(range(len(losses)))
+                      (frame_idx, np.mean([rewards[i] for i in xrange(-10, 0)])))
+        p2.set_xdata(xrange(len(losses)))
         p2.set_ydata(losses)
         ax1.set_xlim([0, len(rewards)])
         ax1.set_ylim([min(rewards), max(rewards) + 10])
@@ -90,8 +90,8 @@ def plot_setup():
         ax2.set_ylim([min(losses), max(losses)])
         print("Max of losses = "+ str(max(losses)))
         ax2.set_yscale('log')
-        plt.draw()
-        plt.pause(0.0001)
+        # plt.draw()
+        # plt.pause(0.001)
 
     def save(fname):
         fig.savefig(fname)
@@ -99,17 +99,17 @@ def plot_setup():
     return update, save
 
 
-def plot(frame_idx, rewards, losses):
-    # clear_output(True)
-    fig = plt.figure(figsize=(20, 5))
-    plt.subplot(121)
-    plt.title('frame %s. reward: %s' %
-              (frame_idx, np.mean([rewards[i] for i in range(-10, 0)])))
-    plt.plot(rewards)
-    plt.subplot(122)
-    plt.title('loss')
-    plt.plot(losses)
-    plt.show()
+# def plot(frame_idx, rewards, losses):
+#     # clear_output(True)
+#     fig = plt.figure(figsize=(20, 5))
+#     plt.subplot(121)
+#     plt.title('frame %s. reward: %s' %
+#               (frame_idx, np.mean([rewards[i] for i in xrange(-10, 0)])))
+#     plt.plot(rewards)
+#     plt.subplot(122)
+#     plt.title('loss')
+#     plt.plot(losses)
+#     plt.show()
 
 
 def get_epsilon(i, EPS_START, EPS_END, EPS_DECAY_START, EPS_DECAY_END):
@@ -164,8 +164,15 @@ def train(agent, env, actions):
     plt_fn = list()
     save_fn = list()
 
+    add_to_replays = list()
+    # s1s = list()
+    # allAgentsActions = list()
+    # allAgentsRewards = list()
+    # s2s = list()
+    allAgentsExp = list()
 
-    for i in range(len(agent)):
+
+    for i in xrange(len(agent)):
 
         replay.append(ReplayBuffer(train_config['replay_buffer_capacity']))
         tr_reward.append(0)
@@ -179,15 +186,23 @@ def train(agent, env, actions):
         optimizer.append(optim.Adam(agent[i].policy.parameters(),
             lr=agent_config['learning_rate']))
 
+        add_to_replays.append(None)
+        # s1s.append(None)
+        # allAgentsActions.append(None)
+        # allAgentsRewards.append(None)
+        # s2s.append(None)
+
 
     # To save computation resources, we will lazily spawn plots
     plt,save = plot_setup()
     plt_fn.append(plt)
     save_fn.append(save)
+    # Lazily add agent experience
+    allAgentsExp.append(None)
 
     spawned_agents = 1
 
-    for training_steps in range(max_steps):
+    for training_steps in xrange(max_steps):
         # Update current exploration parameter epsilon, which is discounted
         # with time.
 
@@ -200,10 +215,18 @@ def train(agent, env, actions):
             plt,save = plot_setup()
             plt_fn.append(plt)
             save_fn.append(save)
+            # Lazily add agent experience
+            allAgentsExp.append(None)
 
-        for i in range(spawned_agents):
+        # Randomize the order in which the spawned agents step. This is an
+        # efficiency thing to make sure all plots update relatively uniformly
+        agentStepOrder = xrange(spawned_agents)
+        # random.shuffle(agentStepOrder)
 
-            add_to_replay = len(agent[i].prev_states) >= 1
+        # All agents will do a step
+        for i in agentStepOrder:
+
+            add_to_replays[i] = len(agent[i].prev_states) >= 1
 
             # Get current state.
             s1 = agent[i].get_state()
@@ -214,15 +237,22 @@ def train(agent, env, actions):
             # Update state according to step.
             s2 = agent[i].get_state()
 
+            # Update all agent's experience
+            allAgentsExp[i] = (s1, action, reward, s2, False)
+
             # Accumulate all rewards.
             tr_reward[i] += reward
             all_rewards[i].append(reward)
             rewards[i].append(np.sum(all_rewards[i]))
 
+        # Now, agents add memory to the replay buffer
+        for i in agentStepOrder:
+
             # Add to memory current state, action it took, reward and new state.
-            if add_to_replay:
+            if add_to_replays[i]:
+                (s1, action, reward, s2, done) = agent[i].receiveAllAgentsExperience(allAgentsExp, i)
                 # enum issue in server machine
-                replay[i].push(s1, action.value, reward, s2, False)
+                replay[i].push(s1, action.value, reward, s2, done)
 
             # Update the network parameter every update_frequency steps.
             if training_steps % policy_update_frequency == 0:
@@ -236,10 +266,13 @@ def train(agent, env, actions):
                 print('step = ', training_steps)
                 print("loss_"+str(i)+" = ", loss[i].data[0])
                 print("train reward_"+str(i)+" = ", tr_reward[i])
+                print("agent_"+str(i)+"_probabilities = ", agent[i].probabilities)
                 print('')
-                if training_steps < 100000:
+                if training_steps < 100000 and training_steps % 5000 == 0:
+                    print("Update Plot A", i)
                     plt_fn[i](training_steps, rewards[i], losses[i])
                 elif training_steps % 50000 == 0:
+                    print("Update Plot B", i)
                     plt_fn[i](training_steps, rewards[i], losses[i])
 
 
@@ -252,23 +285,23 @@ def train(agent, env, actions):
             if training_steps % num_steps_save_training_run == 0:
                 save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
 
-    for i in range(len(agent)):
+    for i in xrange(len(agent)):
 
         position = agent[i].position()
         painter.append(nel.MapVisualizer(env[i].simulator, config2, (
         position[0] - 70, position[1] - 70), (position[0] + 70, position[1] + 70)))
 
-    for _ in range(100):
+    for _ in xrange(100):
 
-        for i in range(len(agent)):
+        for i in xrange(len(agent)):
 
             s1 = agent[i].get_state()
             action, reward = agent[i].step()
             painter[i].draw()
 
-    for i in range(len(agent)):
-        with open('outputs/eval_reward_'+i+'.pkl', 'w') as f:
-            cPickle.dump(eval_reward[i], f)
+    for i in xrange(len(agent)):
+        # with open('outputs/eval_reward_'+str(i)+'.pkl', 'w') as f:
+        #     cPickle.dump(eval_reward[i], f)
 
         save_training_run(losses[i], rewards[i], agent[i], save_fn[i], model_path[i], p_path[i])
         print(eval_reward[i])
@@ -293,11 +326,12 @@ def main():
     env = list()
     optimizer = list()
 
-    num_agents = 2
+    num_agents = 5
+    size_of_memory = train_config['size_of_agents_memory_of_other_agents_actions']
 
-    for i in range(num_agents):
+    for i in xrange(num_agents):
         env.append(Environment(config2))
-        agent.append(WeightedImitationAgent(env[i], state_size=state_size))
+        agent.append(WeightedImitationAgent(env[i], state_size=state_size, size_of_memory=size_of_memory)) # 250 is way too little, if an agent is in an area with few jellybeans their skill drops down to 0. The probs are less an indication of skill and more an indication of local environment
 
     setup_output_dir()
     train(agent, env, [0, 1, 2, 3])

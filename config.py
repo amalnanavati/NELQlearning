@@ -62,11 +62,12 @@ agent_config = {
 train_config={
     'discount_factor': .99,
     'eval_steps': 1000,
-    'max_steps': 10001,
+    'max_steps': 500001, #250001, # NOTE: this needs a 1 at the end for integer division issues
     'batch_size': 64,
     'eval_frequency': 1000,
     'target_update_frequency': 1000,
     'policy_update_frequency': 2,
     'replay_buffer_capacity': 10000,
-    'num_steps_save_training_run': 5000
+    'num_steps_save_training_run': 10000,
+    'size_of_agents_memory_of_other_agents_actions': 1000
     }

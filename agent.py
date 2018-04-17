@@ -51,7 +51,7 @@ class BaseAgent(nel.Agent):
         pass
 
 class RandomizedImitationAgent(BaseAgent):
-    def __init__(self, env, state_size, history_len=1, load_filepath=None):
+    def __init__(self, env, state_size, history_len=1, load_filepath=None, size_of_memory = 500):
         super(RandomizedImitationAgent, self).__init__(env, load_filepath)
         self.policy = Policy(state_size=state_size)
         self.target = Policy(state_size=state_size)
@@ -68,8 +68,9 @@ class RandomizedImitationAgent(BaseAgent):
         self.addOwnExperienceBias = 0.30 # NOTE (amal): ,ust change this both here and above!
         # self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
         # self.weightsForAllAgents = []
-        self.selfAgentID = None
+        self.agentID = None
         self.randomGenerator = Random(datetime.now())
+        self.probabilities = []
 
     def update_target(self):
         self.target.load_state_dict(self.policy.state_dict())
@@ -150,20 +151,20 @@ class RandomizedImitationAgent(BaseAgent):
     # the agent can maintain accurate weights for all oher agents.
     def receiveAllAgentsExperience(self, allAgentsExp, selfI):
         # Check that the agentID has not changed
-        if self.selfAgentID is None:
-            self.selfAgentID = int(selfI)
-        elif self.selfAgentID != int(selfI):
-            print("ERROR selfI has changed from %d to %d" % (self.selfAgentID, selfI))
+        if self.agentID is None:
+            self.agentID = int(selfI)
+        elif self.agentID != int(selfI):
+            print("ERROR selfI has changed from %d to %d" % (self.agentID, selfI))
         # Get Probabilities For Picking An Agent
-        probabilities = [1.0 / len(allAgentsExp) for agentExp in allAgentsExp]
-        self.biasProbabilities(probabilities)
-        print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
+        self.probabilities = [1.0 / len(allAgentsExp) for agentExp in allAgentsExp]
+        self.biasProbabilities(self.probabilities)
+        # print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
         totalProbailitySoFar = 0
-        for i in xrange(len(probabilities)):
-            totalProbailitySoFar += probabilities[i]
-            if i == len(probabilities) - 1:
+        for i in xrange(len(self.probabilities)):
+            totalProbailitySoFar += self.probabilities[i]
+            if i == len(self.probabilities) - 1:
                 totalProbailitySoFar = 1
             if randomFloat <= totalProbailitySoFar:
                 return allAgentsExp[i]
@@ -175,7 +176,7 @@ class RandomizedImitationAgent(BaseAgent):
             probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
 
 class WeightedImitationAgent(BaseAgent):
-    def __init__(self, env, state_size, history_len=1, load_filepath=None):
+    def __init__(self, env, state_size, history_len=1, load_filepath=None, size_of_memory = 500):
         super(WeightedImitationAgent, self).__init__(env, load_filepath)
         self.policy = Policy(state_size=state_size)
         self.target = Policy(state_size=state_size)
@@ -190,10 +191,12 @@ class WeightedImitationAgent(BaseAgent):
 
         # Multi-Agent Customization
         self.addOwnExperienceBias = 0.30 # NOTE (amal): ,ust change this both here and above!
-        self.jellybeanAccuracyForAllAgents = [] # contains tuples, (num jellybeans collected, numSteps).
+        self.rewardsForAllAgents = []
         self.weightsForAllAgents = []
-        self.selfAgentID = None
+        self.agentID = None
         self.randomGenerator = Random(datetime.now())
+        self.probabilities = []
+        self.size_of_memory = size_of_memory
 
     def update_target(self):
         self.target.load_state_dict(self.policy.state_dict())
@@ -274,39 +277,39 @@ class WeightedImitationAgent(BaseAgent):
     # the agent can maintain accurate weights for all oher agents.
     def receiveAllAgentsExperience(self, allAgentsExp, selfI):
         # Check that the agentID has not changed
-        if self.selfAgentID is None:
-            self.selfAgentID = int(selfI)
-        elif self.selfAgentID != int(selfI):
-            print("ERROR selfI has changed from %d to %d" % (self.selfAgentID, selfI))
+        if self.agentID is None:
+            self.agentID = int(selfI)
+        elif self.agentID != int(selfI):
+            print("ERROR selfI has changed from %d to %d" % (self.agentID, selfI))
         # If the number of agents has grown (new agents are appended to the end
         # of the list), extend the data structures for keeping track of all agents
-        numPrevAgents = len(self.jellybeanAccuracyForAllAgents)
+        numPrevAgents = len(self.rewardsForAllAgents)
         numCurrAgents = len(allAgentsExp)
         while numCurrAgents > numPrevAgents: # agents can only get added, never die
-            self.jellybeanAccuracyForAllAgents.append((0, 1)) # All agents start with 1 step to avoid divide by 0 errors
+            self.rewardsForAllAgents.append(deque(maxlen=self.size_of_memory)) # All agents start with 1 step to avoid divide by 0 errors
             self.weightsForAllAgents.append(0.0)
             numPrevAgents+=1
         # Update agent jellybeanAccuracy and weights
         for i in xrange(len(allAgentsExp)):
             (s1, action, reward, s2, done) = allAgentsExp[i]
-            (prevJellybeans, prevSteps) = self.jellybeanAccuracyForAllAgents[i]
-            if reward > 0: # If the agent got a jellybean
-                self.jellybeanAccuracyForAllAgents[i] = (prevJellybeans + 1, prevSteps + 1)
-            else:
-                self.jellybeanAccuracyForAllAgents[i] = (prevJellybeans, prevSteps + 1)
-            self.weightsForAllAgents[i] = self.weightFromTuple(jellybeanAccuracyForAllAgents[i])
+            self.rewardsForAllAgents[i].append(reward)
+            self.weightsForAllAgents[i] = self.weightFromJellybeansCollected(sum(list(self.rewardsForAllAgents[i])), len(list(self.rewardsForAllAgents[i])))
         # Get Probabilities For Picking An Agent
         sumOfWeights = sum(self.weightsForAllAgents)
-        probabilities = [float(weight) / sumOfWeights for weight in self.weightsForAllAgents]
-        self.biasProbabilities(probabilities)
-        print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
+        if sumOfWeights == 0:
+            self.probabilities = [1.0 / len(allAgentsExp) for weight in self.weightsForAllAgents]
+        else:
+            self.probabilities = [float(weight) / sumOfWeights for weight in self.weightsForAllAgents]
+        if (len(self.probabilities) != len(allAgentsExp)): raise Exception("Probabilities is of the wrong length")
+        self.biasProbabilities(self.probabilities)
+        # print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
         totalProbailitySoFar = 0
-        for i in xrange(len(probabilities)):
-            totalProbailitySoFar += probabilities[i]
-            if i == len(probabilities) - 1:
-                totalProbailitySoFar = 1
+        for i in xrange(len(self.probabilities)):
+            totalProbailitySoFar += self.probabilities[i]
+            if i == len(self.probabilities) - 1:
+                totalProbailitySoFar = 1.0
             if randomFloat <= totalProbailitySoFar:
                 return allAgentsExp[i]
 
@@ -316,11 +319,11 @@ class WeightedImitationAgent(BaseAgent):
         for i in range(len(probabilities)):
             probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
 
-    def weightFromTuple(self, tup):
-        return float(tup[0])/tup[1]
+    def weightFromJellybeansCollected(self, jellybeans, timesteps):
+        return float(jellybeans)/timesteps
 
 class RLAgent(BaseAgent):
-    def __init__(self, env, state_size, history_len=1, load_filepath=None):
+    def __init__(self, env, state_size, history_len=1, load_filepath=None, size_of_memory = 500):
         super(RLAgent, self).__init__(env, load_filepath)
         self.policy = Policy(state_size=state_size)
         self.target = Policy(state_size=state_size)
@@ -332,6 +335,8 @@ class RLAgent(BaseAgent):
             param.requires_grad = False
         self.prev_states = deque(maxlen=history_len)
         self.history_len = history_len
+
+        self.probabilities = []
 
     def update_target(self):
         self.target.load_state_dict(self.policy.state_dict())
@@ -401,6 +406,9 @@ class RLAgent(BaseAgent):
         model_path = filepath+'.model'
         with open(model_path, 'rb') as f:
             self.policy = torch.load(f)
+
+    def receiveAllAgentsExperience(self, allAgentsExp, selfI):
+        return allAgentsExp[selfI]
 
 
 
