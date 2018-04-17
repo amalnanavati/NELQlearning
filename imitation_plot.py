@@ -6,11 +6,11 @@ def plot(plot_agent):
     colors=["blue","red","green","yellow"]
 
     chart_1 = fig.add_subplot(211)
-    chart_1.set_title('sum of rewards')
+    chart_1.set_title('acc rewards per timestep')
     chart_1.grid(True)
 
     chart_2 = fig.add_subplot(212)
-    chart_2.set_title('rewards per timestep')
+    chart_2.set_title('acc rewards per time(clock)')
     chart_2.grid(True)
 
     fig.tight_layout()
@@ -44,11 +44,11 @@ def plot_compare(plot_agent):
     colors=["blue","red","green","yellow"]
 
     chart_1 = fig.add_subplot(211)
-    chart_1.set_title('sum of rewards')
+    chart_1.set_title('acc. rewards per timestep')
     chart_1.grid(True)
 
     chart_2 = fig.add_subplot(212)
-    chart_2.set_title('rewards per timestep')
+    chart_2.set_title('acc. rewards per time(clock)')
     chart_2.grid(True)
 
     fig.tight_layout()
