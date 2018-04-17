@@ -218,7 +218,7 @@ def main():
     env = list()
     optimizer = list()
 
-    num_agents = 2
+    num_agents = 3
 
     for i in range(num_agents):
         env.append(Environment(config2))
