@@ -202,6 +202,7 @@ def train(agent, env, actions):
                 print("loss_"+str(i)+" = ", loss[i].data[0])
                 print("train reward_"+str(i)+" = ", tr_reward[i])
                 print("agent_"+str(i)+"_probabilities = ", agent[i].probabilities)
+                print("agent_"+str(i)+"_sum_of_probabilities = ", sum([prob for (agentID, prob) in agent[i].probabilities]))
                 print('')
 
                 writer[i].write(str(training_steps)+" "+str(round(time.time()-now))+
@@ -244,7 +245,7 @@ def main():
 
     for i in xrange(num_agents):
         env.append(Environment(config2))
-        agent.append(WeightedImitationAgent(env[i], state_size=state_size, size_of_memory=size_of_memory)) # 250 is way too little, if an agent is in an area with few jellybeans their skill drops down to 0. The probs are less an indication of skill and more an indication of local environment
+        agent.append(RandomizedImitationAgent(env[i], state_size=state_size, size_of_memory=size_of_memory)) # 250 is way too little, if an agent is in an area with few jellybeans their skill drops down to 0. The probs are less an indication of skill and more an indication of local environment
 
     setup_output_dir()
     train(agent, env, [0, 1, 2, 3])

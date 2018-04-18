@@ -156,24 +156,42 @@ class RandomizedImitationAgent(BaseAgent):
         elif self.agentID != int(selfI):
             print("ERROR selfI has changed from %d to %d" % (self.agentID, selfI))
         # Get Probabilities For Picking An Agent
-        self.probabilities = [1.0 / len(allAgentsExp) for agentExp in allAgentsExp]
-        self.biasProbabilities(self.probabilities)
+        self.probabilities = [(i, 1.0 / len(allAgentsExp)) for i in xrange(len(allAgentsExp))]
+        self.probabilities = self.biasProbabilities(self.probabilities)
         # print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
         totalProbailitySoFar = 0
         for i in xrange(len(self.probabilities)):
-            totalProbailitySoFar += self.probabilities[i]
+            agentID = self.probabilities[i][0]
+            totalProbailitySoFar += self.probabilities[i][1]
             if i == len(self.probabilities) - 1:
-                totalProbailitySoFar = 1
+                totalProbailitySoFar = 1.0
             if randomFloat <= totalProbailitySoFar:
-                return allAgentsExp[i]
+                return allAgentsExp[agentID]
 
     # Destructively modify the probabilities list to account for self-bias
     def biasProbabilities(self, probabilities):
-        selfConfidenceProbabilities = [1.0 if i == self.agentID else 0.0 for i in xrange(len(probabilities))]
-        for i in range(len(probabilities)):
-            probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
+        # Pick Top 1 agent other than you, and only compare to them
+        maxAgentID, maxProb = None, None
+        for i in xrange(len(probabilities)):
+            agentID = probabilities[i][0]
+            if agentID != self.agentID:
+                prob = probabilities[i][1]
+                if maxProb is None or prob > maxProb or (prob == maxProb and bool(self.randomGenerator.getrandbits(1))):
+                    maxProb = prob
+                    maxAgentID = agentID
+        if maxAgentID is None:
+            newProbabilities = []
+        else:
+            newProbabilities = [(maxAgentID, maxProb)]
+        newProbabilities.append((self.agentID, probabilities[self.agentID][1]))
+        totalProbability = sum([prob for (agentID, prob) in newProbabilities])
+        newProbabilities = [(agentID, prob/totalProbability) for (agentID, prob) in newProbabilities]
+        selfConfidenceProbabilities = [(agentID, 1.0 if agentID == self.agentID else 0.0)for (agentID, prob) in newProbabilities]
+        for i in range(len(newProbabilities)):
+            newProbabilities[i] = (newProbabilities[i][0], newProbabilities[i][1]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i][1]*self.addOwnExperienceBias)
+        return newProbabilities
 
 class WeightedImitationAgent(BaseAgent):
     def __init__(self, env, state_size, history_len=1, load_filepath=None, size_of_memory = 500):
@@ -293,31 +311,49 @@ class WeightedImitationAgent(BaseAgent):
         for i in xrange(len(allAgentsExp)):
             (s1, action, reward, s2, done) = allAgentsExp[i]
             self.rewardsForAllAgents[i].append(reward)
-            self.weightsForAllAgents[i] = self.weightFromJellybeansCollected(sum(list(self.rewardsForAllAgents[i])), len(list(self.rewardsForAllAgents[i])))
+            self.weightsForAllAgents[i] = self.weightFromJellybeansCollected(sum(list(self.rewardsForAllAgents[i])), self.size_of_memory)#len(list(self.rewardsForAllAgents[i])))
         # Get Probabilities For Picking An Agent
         sumOfWeights = sum(self.weightsForAllAgents)
         if sumOfWeights == 0:
-            self.probabilities = [1.0 / len(allAgentsExp) for weight in self.weightsForAllAgents]
+            self.probabilities = [(i, 1.0 / len(allAgentsExp)) for i in xrange(len(self.weightsForAllAgents))]
         else:
-            self.probabilities = [float(weight) / sumOfWeights for weight in self.weightsForAllAgents]
-        if (len(self.probabilities) != len(allAgentsExp)): raise Exception("Probabilities is of the wrong length")
-        self.biasProbabilities(self.probabilities)
+            self.probabilities = [(i, float(self.weightsForAllAgents[i]) / sumOfWeights) for i in xrange(len(self.weightsForAllAgents))]
+        # if (len(self.probabilities) != len(allAgentsExp)): raise Exception("Probabilities is of the wrong length")
+        self.probabilities = self.biasProbabilities(self.probabilities)
         # print("Sanity Check: Sum of Probabilies = "+str(sum(probabilities)))
         # Determine which agent's experience to add into the replay buffer
         randomFloat = self.randomGenerator.random()
         totalProbailitySoFar = 0
         for i in xrange(len(self.probabilities)):
-            totalProbailitySoFar += self.probabilities[i]
+            agentID = self.probabilities[i][0]
+            totalProbailitySoFar += self.probabilities[i][1]
             if i == len(self.probabilities) - 1:
                 totalProbailitySoFar = 1.0
             if randomFloat <= totalProbailitySoFar:
-                return allAgentsExp[i]
+                return allAgentsExp[agentID]
 
     # Destructively modify the probabilities list to account for self-bias
     def biasProbabilities(self, probabilities):
-        selfConfidenceProbabilities = [1.0 if i == self.agentID else 0.0 for i in xrange(len(probabilities))]
-        for i in range(len(probabilities)):
-            probabilities[i] = probabilities[i]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i]*self.addOwnExperienceBias
+        # Pick Top 1 agent other than you, and only compare to them
+        maxAgentID, maxProb = None, None
+        for i in xrange(len(probabilities)):
+            agentID = probabilities[i][0]
+            if agentID != self.agentID:
+                prob = probabilities[i][1]
+                if maxProb is None or prob > maxProb or (prob == maxProb and bool(self.randomGenerator.getrandbits(1))):
+                    maxProb = prob
+                    maxAgentID = agentID
+        if maxAgentID is None:
+            newProbabilities = []
+        else:
+            newProbabilities = [(maxAgentID, maxProb)]
+        newProbabilities.append((self.agentID, probabilities[self.agentID][1]))
+        totalProbability = sum([prob for (agentID, prob) in newProbabilities])
+        newProbabilities = [(agentID, prob/totalProbability) for (agentID, prob) in newProbabilities]
+        selfConfidenceProbabilities = [(agentID, 1.0 if agentID == self.agentID else 0.0)for (agentID, prob) in newProbabilities]
+        for i in range(len(newProbabilities)):
+            newProbabilities[i] = (newProbabilities[i][0], newProbabilities[i][1]*(1.0-self.addOwnExperienceBias) + selfConfidenceProbabilities[i][1]*self.addOwnExperienceBias)
+        return newProbabilities
 
     def weightFromJellybeansCollected(self, jellybeans, timesteps):
         return float(jellybeans)/timesteps
