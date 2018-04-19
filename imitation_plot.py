@@ -45,9 +45,11 @@ def plot(plot_agent):
 
         # Graph Cumulative Reward divided by time (y) versus time (x)
         # length = 100000
-        subsetSize = len(plot_data[0])#length/200#
-        l1, = chart_1.plot(plot_data[0][:subsetSize],plot_data_cumu_rew_over_world_time[:subsetSize],color=colors[i],label="agent_"+str(i))
-        l2, = chart_2.plot(plot_data[1][:subsetSize],plot_data_cumu_rew_over_wall_time[:subsetSize],color=colors[i],label="agent_"+str(i))
+        # subsetSize = len(plot_data[0])#length/200#
+        # l1, = chart_1.plot(plot_data[0][:subsetSize],plot_data_cumu_rew_over_world_time[:subsetSize],color=colors[i],label="agent_"+str(i))
+        # l2, = chart_2.plot(plot_data[1][:subsetSize],plot_data_cumu_rew_over_wall_time[:subsetSize],color=colors[i],label="agent_"+str(i))
+        l1, = chart_1.plot(plot_data[0],plot_data_cumu_rew_over_world_time,color=colors[i],label="agent_"+str(i))
+        l2, = chart_2.plot(plot_data[1],plot_data_cumu_rew_over_wall_time,color=colors[i],label="agent_"+str(i))
 
         # Graph Cumulative Reward over last 50000 timesteps divided by time in last 50000 timesteps (y) versus time (x)
         # lastTimesteps = 50000
