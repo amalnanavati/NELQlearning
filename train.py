@@ -99,6 +99,7 @@ def train(agent, env, actions):
     discount_factor = train_config['discount_factor']
     eval_steps = train_config['eval_steps']
     max_steps = train_config['max_steps']
+    steps_before_new_agent_added = train_config['steps_before_new_agent_added']
 
     replay = list()
     tr_reward = list()
@@ -152,7 +153,7 @@ def train(agent, env, actions):
 
         epsilon = eps_func(training_steps)
 
-        if training_steps == int(round(max_steps*spawned_agents))/len(agent):
+        if training_steps > 0 and training_steps % steps_before_new_agent_added == 0 and spawned_agents < len(agent):
             print("ADDING AN AGENT", training_steps)
             spawned_agents+=1
             # Lazily add agent experience
@@ -197,7 +198,7 @@ def train(agent, env, actions):
                         batch_size, agent[i], replay[i], discount_factor, optimizer[i])
                     losses[i].append(loss[i].data[0])
 
-            if training_steps % 200 == 0 and training_steps > int(round(max_steps*i))/len(agent):
+            if training_steps % 200 == 0 and training_steps > steps_before_new_agent_added*i:
                 print('step = ', training_steps)
                 print("loss_"+str(i)+" = ", loss[i].data[0])
                 print("train reward_"+str(i)+" = ", tr_reward[i])
@@ -245,7 +246,7 @@ def main():
 
     for i in xrange(num_agents):
         env.append(Environment(config2))
-        agent.append(RandomizedImitationAgent(env[i], state_size=state_size, size_of_memory=size_of_memory)) # 250 is way too little, if an agent is in an area with few jellybeans their skill drops down to 0. The probs are less an indication of skill and more an indication of local environment
+        agent.append(WeightedImitationAgent(env[i], state_size=state_size, size_of_memory=size_of_memory)) # 250 is way too little, if an agent is in an area with few jellybeans their skill drops down to 0. The probs are less an indication of skill and more an indication of local environment
 
     setup_output_dir()
     train(agent, env, [0, 1, 2, 3])
